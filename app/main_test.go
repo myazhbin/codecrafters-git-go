@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -148,6 +149,97 @@ func TestParseObject(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, _, err := parseObject([]byte(raw)); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
+	}
+}
+
+func TestHashObject(t *testing.T) {
+	inTempRepo(t)
+
+	// Known hashes produced by the official git implementation.
+	cases := map[string]struct {
+		content string
+		hash    string
+	}{
+		"hello world": {"hello world\n", "3b18e512dba79e4c8300dd08aeb37f8e728b8dad"},
+		"empty":       {"", "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"},
+		"no newline":  {"hello world", "95d09f2b10159347eece71399a7e2e907ea3df4f"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile("test.txt", []byte(tc.content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			var out bytes.Buffer
+			if err := run("hash-object", []string{"-w", "test.txt"}, &out); err != nil {
+				t.Fatalf("hash-object: %v", err)
+			}
+			if out.String() != tc.hash+"\n" {
+				t.Fatalf("output = %q, want %q", out.String(), tc.hash+"\n")
+			}
+
+			// The stored object must be zlib-compressed "blob <size>\0<content>".
+			f, err := os.Open(filepath.Join(".git", "objects", tc.hash[:2], tc.hash[2:]))
+			if err != nil {
+				t.Fatalf("object file not written: %v", err)
+			}
+			defer f.Close()
+			zr, err := zlib.NewReader(f)
+			if err != nil {
+				t.Fatalf("object is not zlib data: %v", err)
+			}
+			raw, err := io.ReadAll(zr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := fmt.Sprintf("blob %d\x00%s", len(tc.content), tc.content)
+			if string(raw) != want {
+				t.Errorf("stored object = %q, want %q", raw, want)
+			}
+
+			// And it must round-trip through cat-file.
+			out.Reset()
+			if err := run("cat-file", []string{"-p", tc.hash}, &out); err != nil {
+				t.Fatalf("cat-file: %v", err)
+			}
+			if out.String() != tc.content {
+				t.Errorf("cat-file output = %q, want %q", out.String(), tc.content)
+			}
+		})
+	}
+}
+
+func TestHashObjectWithoutWrite(t *testing.T) {
+	inTempRepo(t)
+	if err := os.WriteFile("test.txt", []byte("hello world\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := run("hash-object", []string{"test.txt"}, &out); err != nil {
+		t.Fatalf("hash-object: %v", err)
+	}
+	const hash = "3b18e512dba79e4c8300dd08aeb37f8e728b8dad"
+	if out.String() != hash+"\n" {
+		t.Errorf("output = %q", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(".git", "objects", hash[:2], hash[2:])); !os.IsNotExist(err) {
+		t.Errorf("object should not be written without -w")
+	}
+}
+
+func TestHashObjectErrors(t *testing.T) {
+	inTempRepo(t)
+	for name, args := range map[string][]string{
+		"no args":      {},
+		"only flag":    {"-w"},
+		"missing file": {"-w", "does-not-exist.txt"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := run("hash-object", args, &bytes.Buffer{}); err == nil {
 				t.Fatal("expected an error")
 			}
 		})

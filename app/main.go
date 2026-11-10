@@ -27,6 +27,8 @@ func run(command string, args []string, stdout io.Writer) error {
 		return cmdInit(stdout)
 	case "cat-file":
 		return cmdCatFile(args, stdout)
+	case "hash-object":
+		return cmdHashObject(args, stdout)
 	default:
 		return fmt.Errorf("unknown command %s", command)
 	}
@@ -59,4 +61,36 @@ func cmdCatFile(args []string, stdout io.Writer) error {
 
 	_, err = stdout.Write(content)
 	return err
+}
+
+func cmdHashObject(args []string, stdout io.Writer) error {
+	write := false
+	var files []string
+	for _, arg := range args {
+		if arg == "-w" {
+			write = true
+		} else {
+			files = append(files, arg)
+		}
+	}
+	if len(files) != 1 {
+		return fmt.Errorf("usage: mygit hash-object [-w] <file>")
+	}
+
+	content, err := os.ReadFile(files[0])
+	if err != nil {
+		return err
+	}
+
+	var hash string
+	if write {
+		if hash, err = writeObject(".git", "blob", content); err != nil {
+			return err
+		}
+	} else {
+		hash, _ = hashObject("blob", content)
+	}
+
+	fmt.Fprintln(stdout, hash)
+	return nil
 }
