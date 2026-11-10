@@ -31,6 +31,8 @@ func run(command string, args []string, stdout io.Writer) error {
 		return cmdHashObject(args, stdout)
 	case "ls-tree":
 		return cmdLsTree(args, stdout)
+	case "write-tree":
+		return cmdWriteTree(args, stdout)
 	default:
 		return fmt.Errorf("unknown command %s", command)
 	}
@@ -130,5 +132,19 @@ func cmdLsTree(args []string, stdout io.Writer) error {
 			fmt.Fprintf(stdout, "%06s %s %s\t%s\n", e.Mode, e.Type(), e.Hash, e.Name)
 		}
 	}
+	return nil
+}
+
+func cmdWriteTree(args []string, stdout io.Writer) error {
+	if len(args) != 0 {
+		return fmt.Errorf("usage: mygit write-tree")
+	}
+
+	hash, _, err := writeTree(".git", ".")
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(stdout, hash)
 	return nil
 }
