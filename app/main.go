@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // Usage: your_program.sh <command> <arg1> <arg2> ...
@@ -33,6 +34,8 @@ func run(command string, args []string, stdout io.Writer) error {
 		return cmdLsTree(args, stdout)
 	case "write-tree":
 		return cmdWriteTree(args, stdout)
+	case "commit-tree":
+		return cmdCommitTree(args, stdout)
 	default:
 		return fmt.Errorf("unknown command %s", command)
 	}
@@ -141,6 +144,52 @@ func cmdWriteTree(args []string, stdout io.Writer) error {
 	}
 
 	hash, _, err := writeTree(".git", ".")
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(stdout, hash)
+	return nil
+}
+
+func cmdCommitTree(args []string, stdout io.Writer) error {
+	const usage = "usage: mygit commit-tree <tree> [-p <parent>]... -m <message>"
+
+	var tree string
+	var parents, messages []string
+	for i := 0; i < len(args); i++ {
+		switch arg := args[i]; arg {
+		case "-p", "-m":
+			if i+1 >= len(args) {
+				return fmt.Errorf("option %s requires a value\n%s", arg, usage)
+			}
+			i++
+			if arg == "-p" {
+				parents = append(parents, args[i])
+			} else {
+				messages = append(messages, args[i])
+			}
+		default:
+			if tree != "" {
+				return fmt.Errorf("%s", usage)
+			}
+			tree = arg
+		}
+	}
+	if tree == "" || len(messages) == 0 {
+		return fmt.Errorf("%s", usage)
+	}
+
+	for _, hash := range append([]string{tree}, parents...) {
+		if !isHexHash(hash) {
+			return fmt.Errorf("not a valid object name %s", hash)
+		}
+	}
+
+	// Like git, multiple -m values become separate paragraphs.
+	message := strings.Join(messages, "\n\n")
+	content := encodeCommit(tree, parents, defaultSignature("AUTHOR"), defaultSignature("COMMITTER"), message)
+	hash, err := writeObject(".git", "commit", content)
 	if err != nil {
 		return err
 	}

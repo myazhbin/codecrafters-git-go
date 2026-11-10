@@ -23,7 +23,7 @@ func writeFiles(t *testing.T, files map[string]string) {
 	}
 }
 
-// realGit runs the official git in dir with a fixed identity and returns its
+// realGit runs the official git in dir ignoring the user's git configuration, and returns its
 // trimmed output. The test is skipped when git is not installed.
 func realGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
@@ -32,11 +32,7 @@ func realGit(t *testing.T, dir string, args ...string) string {
 	}
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
-		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
-		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com",
-	)
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
