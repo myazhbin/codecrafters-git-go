@@ -29,6 +29,8 @@ func run(command string, args []string, stdout io.Writer) error {
 		return cmdCatFile(args, stdout)
 	case "hash-object":
 		return cmdHashObject(args, stdout)
+	case "ls-tree":
+		return cmdLsTree(args, stdout)
 	default:
 		return fmt.Errorf("unknown command %s", command)
 	}
@@ -92,5 +94,41 @@ func cmdHashObject(args []string, stdout io.Writer) error {
 	}
 
 	fmt.Fprintln(stdout, hash)
+	return nil
+}
+
+func cmdLsTree(args []string, stdout io.Writer) error {
+	nameOnly := false
+	var hashes []string
+	for _, arg := range args {
+		if arg == "--name-only" {
+			nameOnly = true
+		} else {
+			hashes = append(hashes, arg)
+		}
+	}
+	if len(hashes) != 1 {
+		return fmt.Errorf("usage: mygit ls-tree [--name-only] <tree>")
+	}
+
+	objType, content, err := readObject(".git", hashes[0])
+	if err != nil {
+		return err
+	}
+	if objType != "tree" {
+		return fmt.Errorf("not a tree object")
+	}
+
+	entries, err := parseTree(content)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if nameOnly {
+			fmt.Fprintln(stdout, e.Name)
+		} else {
+			fmt.Fprintf(stdout, "%06s %s %s\t%s\n", e.Mode, e.Type(), e.Hash, e.Name)
+		}
+	}
 	return nil
 }
