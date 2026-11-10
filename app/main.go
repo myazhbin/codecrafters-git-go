@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -36,20 +37,30 @@ func run(command string, args []string, stdout io.Writer) error {
 		return cmdWriteTree(args, stdout)
 	case "commit-tree":
 		return cmdCommitTree(args, stdout)
+	case "clone":
+		return cmdClone(args)
 	default:
 		return fmt.Errorf("unknown command %s", command)
 	}
 }
 
-func cmdInit(stdout io.Writer) error {
-	for _, dir := range []string{".git", ".git/objects", ".git/refs"} {
+// initRepo creates the skeleton of a git directory at gitDir.
+func initRepo(gitDir string) error {
+	for _, dir := range []string{gitDir, filepath.Join(gitDir, "objects"), filepath.Join(gitDir, "refs")} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("creating directory: %w", err)
 		}
 	}
 
-	if err := os.WriteFile(".git/HEAD", []byte("ref: refs/heads/main\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0644); err != nil {
 		return fmt.Errorf("writing HEAD: %w", err)
+	}
+	return nil
+}
+
+func cmdInit(stdout io.Writer) error {
+	if err := initRepo(".git"); err != nil {
+		return err
 	}
 
 	fmt.Fprintln(stdout, "Initialized git directory")
@@ -196,4 +207,11 @@ func cmdCommitTree(args []string, stdout io.Writer) error {
 
 	fmt.Fprintln(stdout, hash)
 	return nil
+}
+
+func cmdClone(args []string) error {
+	if len(args) != 2 {
+		return fmt.Errorf("usage: mygit clone <url> <directory>")
+	}
+	return clone(args[0], args[1])
 }
